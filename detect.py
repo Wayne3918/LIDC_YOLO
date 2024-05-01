@@ -24,7 +24,7 @@ from utils.torch_utils import select_device
 # 3D YOLO imports
 from models3D.model import attempt_load
 from utils3D.datasets import LoadNiftis
-from utils3D.general import non_max_suppression, scale_coords, zxyzxy2zxydwh
+from utils3D.general import non_max_suppression, scale_coords, zxyzxy2zxydwh, inverse_sigmoid_tensor
 
 
 # Configuration
@@ -99,10 +99,12 @@ def run(weights,  # model.pt path(s)
         
         # Inference
         pred = model(img)[0]
-
+        print(pred.shape)
+        pred[:,:,-1] = inverse_sigmoid_tensor(pred[:,:,-1])
+        # print(pred[0,0,:])
         # NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, multi_label=True, max_det=max_det)
-        
+
         # Process predictions
         for _, det in enumerate(pred):  # per image
             seen += 1
@@ -115,29 +117,29 @@ def run(weights,  # model.pt path(s)
                 txt_path = str(save_dir / 'labels' / p.name[:-7])  # img.txt
             s += '%gx%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[2, 1, 0, 2, 1, 0]]  # normalization gain dwhdwh - might be [[2, 0, 1, 2, 0, 1]], hard to tell with cubic/square input
-            
+            # print(det)
             if len(det):
                 # Rescale boxes from img_size to im0 size
                 im0_reshape = [im0.shape[2], im0.shape[1], im0.shape[0]]
                 det[:, :6] = scale_coords(img.shape[2:], det[:, :6], im0_reshape).round()
                 
                 # Print results
-                for c in det[:, -1].unique():
-                    n = (det[:, -1] == c).sum()  # detections per class
+                for c in det[:, -2].unique():
+                    n = (det[:, -2] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
                 
                 # testing since default run doesn't set save_txt=True
-                for *zxyzxy, conf, cls in reversed(det):
+                for *zxyzxy, conf, cls, mal in reversed(det):
                     zxydwh = (zxyzxy2zxydwh(torch.tensor(zxyzxy).view(1, 6)) / gn).view(-1).tolist()  # normalized zxydwh
-                    line = (cls, *zxydwh, conf)  # label format
-                    print('\ncls z x y d w h conf')
+                    line = (cls, *zxydwh, conf, mal)  # label format
+                    print('\ncls z x y d w h conf mal')
                     print(('%g ' * len(line)).rstrip() % line)
                     
                 # Write results
                 if save_txt:  # Write to file
-                    for *zxyzxy, conf, cls in reversed(det):
+                    for *zxyzxy, conf, cls, mal in reversed(det):
                         zxydwh = (zxyzxy2zxydwh(torch.tensor(zxyzxy).view(1, 6)) / gn).view(-1).tolist()  # normalized zxydwh
-                        line = (cls, *zxydwh, conf) if save_conf else (cls, *zxydwh)  # label format
+                        line = (cls, *zxydwh, conf, mal) if save_conf else (cls, *zxydwh, mal)  # label format
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
                             

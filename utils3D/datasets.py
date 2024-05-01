@@ -309,6 +309,8 @@ class LoadNiftisAndLabels(Dataset):
 
         labels = self.labels[self.indices[index]].copy()
         nl = len(labels)  # number of labels
+        mal_label = labels[:, -1]
+
         labels = labels[:, :7]
         if self.augment:           
             # Label transformation is done to make certain augmentations more straightforward
@@ -317,7 +319,7 @@ class LoadNiftisAndLabels(Dataset):
 
             # random zoom
             # img, labels = tensor_cutout(img, labels, self.hyp['cutout_params'])
-            img, labels = random_zoom(img, labels, self.hyp['max_zoom'], self.hyp['min_zoom'], self.hyp['prob_zoom'])
+            img, labels, mal_label = random_zoom(img, labels, mal_label, self.hyp['max_zoom'], self.hyp['min_zoom'], self.hyp['prob_zoom'])
             # img = adjust_brightness(img)
             # img, labels = random_flip_with_bbox(img, labels)
             img = add_random_noise(img, p=self.hyp['prob_zoom'])
@@ -340,9 +342,12 @@ class LoadNiftisAndLabels(Dataset):
             # update after cutout
             nl = len(labels)  # number of labels
         
-        labels_out = torch.zeros((nl, 8))
+        len_mal = 1
+        labels_out = torch.zeros((nl, 8 + len_mal))
+
         if nl:
-            labels_out[:, 1:] = torch.from_numpy(labels)
+            labels_out[:, 1:8] = torch.from_numpy(labels)
+            labels_out[:, -1:] = torch.from_numpy(mal_label).view(-1, 1)
 
         return img, labels_out, self.img_files[self.indices[index]], shapes
 

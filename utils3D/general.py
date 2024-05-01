@@ -306,6 +306,19 @@ def _3d_nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float):
 
     return torch.stack(keep, dim=0)
 
+def inverse_sigmoid_numpy(y):
+    if np.any(y <= 0) or np.any(y >= 1):
+        # raise ValueError("inverse_sigmoid value only accepts input between 0 and 1")
+        print("Warning! inverse_sigmoid value only accepts input between 0 and 1")
+        return y
+    return np.log(y / (1 - y))
+
+def inverse_sigmoid_tensor(y):
+    if torch.any(y <= 0) or torch.any(y >= 1):
+        # raise ValueError("inverse_sigmoid value only accepts input between 0 and 1")
+        print("Warning! inverse_sigmoid value only accepts input between 0 and 1")
+        return y
+    return torch.log(y / (1 - y))
 
 def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False, multi_label=False,
                         labels=(), max_det=300):
@@ -324,9 +337,8 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     Returns:
         output (torch.tensor): list of detections, on (n,8) tensor per image [zxyzxy, conf, cls]
     """
-    nc = prediction.shape[2] - 7  # number of classes
+    nc = prediction.shape[2] - 7 - 1  # number of classes
     xc = prediction[..., 6] > conf_thres  # candidates
-
     # Checks
     assert 0 <= conf_thres <= 1, f'Invalid Confidence threshold {conf_thres}, valid values are between 0.0 and 1.0'
     assert 0 <= iou_thres <= 1, f'Invalid IoU {iou_thres}, valid values are between 0.0 and 1.0'
@@ -340,8 +352,11 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     merge = False  # use merge-NMS
 
     t = time.time()
-    output = [torch.zeros((0, 8), device=prediction.device)] * prediction.shape[0]
+    # output = [torch.zeros((0, 8), device=prediction.device)] * prediction.shape[0]
+    output = [torch.zeros((0, 9), device=prediction.device)] * prediction.shape[0]
     for xi, x in enumerate(prediction):  # image index, image inference
+        
+        # print(x)
         # Apply constraints
         # x[((x[..., 3:6] < min_dwh) | (x[..., 3:6] > max_dwh)).any(1), 6] = 0  # depth-width-height
         x = x[xc[xi]]  # confidence
@@ -360,7 +375,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
             continue
 
         # Compute conf
-        x[:, 7:] *= x[:, 6:7]  # conf = obj_conf * cls_conf
+        x[:, 7:8] *= x[:, 6:7]  # conf = obj_conf * cls_conf
 
         # Box (center z, center x, center y, depth, width, height) to (z1, x1, y1, z2, x2, y2)
         box = zxydwh2zxyzxy(x[:, :6])
@@ -370,9 +385,10 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
             i, j = (x[:, 7:] > conf_thres).nonzero(as_tuple=False).T
             x = torch.cat((box[i], x[i, j + 7, None], j[:, None].float()), 1)
         else:  # best class only
-            conf, j = x[:, 7:].max(1, keepdim=True)
-            x = torch.cat((box, conf, j.float()), 1)[conf.view(-1) > conf_thres]
-
+            conf, j = x[:, 7:8].max(1, keepdim=True)
+            mal = x[:, 8:9]
+            x = torch.cat((box, conf, j.float(), mal), 1)[conf.view(-1) > conf_thres]
+        
         # Filter by class
         if classes is not None:
             x = x[(x[:, 7:8] == torch.tensor(classes, device=x.device)).any(1)]
@@ -380,7 +396,6 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
         # Apply finite constraint
         # if not torch.isfinite(x).all():
         #     x = x[torch.isfinite(x).all(1)]
-
         # Check shape
         n = x.shape[0]  # number of boxes
         if not n:  # no boxes
@@ -402,6 +417,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
             if redundant:
                 i = i[iou.sum(1) > 1]  # require redundancy
 
+        # print(x[i])
         output[xi] = x[i]
         if (time.time() - t) > time_limit:
             print(f'WARNING: NMS time limit {time_limit}s exceeded')

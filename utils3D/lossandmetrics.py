@@ -209,6 +209,8 @@ class ComputeLossVF:
         # Class label smoothing https://arxiv.org/pdf/1902.04103.pdf eqn 3
         self.cp, self.cn = smooth_BCE(eps=self.hyp.get('label_smoothing', 0.0))  # positive, negative BCE targets
 
+        self.MSEmal = nn.MSELoss()
+
         # Focal loss
         self.g = self.hyp['fl_gamma']  # focal loss gamma
         if self.g > 0:
@@ -237,8 +239,8 @@ class ComputeLossVF:
             loss components (torch.Tensor): tensor containing loss component values
         """
         device = targets.device
-        lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
-        tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
+        lcls, lbox, lobj, lreg = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
+        tcls, tbox, tmal, indices, anchors = self.build_targets(p, targets)  # targets
 
         # Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
@@ -268,9 +270,19 @@ class ComputeLossVF:
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)
-                    t = torch.full_like(ps[:, 7:], self.cn, device=device)  # targets
+                    t = torch.full_like(ps[:, 7:-1], self.cn, device=device)  # targets
                     t[range(n), tcls[i]] = self.cp
-                    lcls += (self.BCEcls(ps[:, 7:], t))  # BCE
+                    lcls += (self.BCEcls(ps[:, 7:-1], t))  # BCE
+                # Mal
+                # t = torch.full_like(ps[:, -1], self.cn, device=device)  # targets
+                # t[range(n), tcls[i]] = self.cp
+                # print(ps.shape)
+                # print(ps[:, -1])
+                # print(tmal[i])
+                lreg += (self.MSEmal(ps[:, -1], tmal[i]))  # BCE
+                # print(ps[:,-1])
+                # print(tmal[i])
+
 
             # using varifocal loss
             alpha = 0.75
@@ -292,9 +304,11 @@ class ComputeLossVF:
         lbox *= self.hyp['box']
         lobj *= self.hyp['obj']
         lcls *= self.hyp['cls']
+        lreg *= self.hyp['reg']
+
         bs = tobj.shape[0]  # batch size
 
-        return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls)).detach()
+        return (lbox + lobj + lcls + lreg) * bs, torch.cat((lbox, lobj, lcls, lreg)).detach()
 
     def build_targets(self, pred, targets):
         """Build targets for compute_loss()
@@ -311,11 +325,11 @@ class ComputeLossVF:
             anch (List[int]): List of anchors corresponding to each detection layer
         """
         # na, nt = self.na, targets.shape[0]  # number of anchors, targets
-        tcls, tbox, indices, anch = [], [], [], []
-        gain = torch.ones(9, device=targets.device)  # normalized to gridspace gain
+        tcls, tbox, tmal, indices, anch = [], [], [], [], []
+        gain = torch.ones(9 + 1, device=targets.device)  # normalized to gridspace gain
         ai = torch.arange(self.na, device=targets.device).float().view(self.na, 1).repeat(1, targets.shape[0])  # same as .repeat_interleave(nt)
         targets = torch.cat((targets.repeat(self.na, 1, 1), ai[:, :, None]), 2)  # append anchor indices
-
+        # print(targets)
         g = 0.5  # bias
         # 3D offsets:
         off = torch.tensor([[0, 0, 0],
@@ -350,6 +364,7 @@ class ComputeLossVF:
 
             # Define
             b, c = t[:, :2].long().T  # image, class
+            mal = t[:, -2] # mal
             gzxy = t[:, 2:5]  # grid zxy
             gdwh = t[:, 5:8]  # grid dwh
             gijk = (gzxy - offsets).long()
@@ -362,8 +377,9 @@ class ComputeLossVF:
             tbox.append(torch.cat((gzxy - gijk, gdwh), 1))  # box
             anch.append(anchors[a])  # anchors
             tcls.append(c)  # class
+            tmal.append(mal)
 
-        return tcls, tbox, indices, anch
+        return tcls, tbox, tmal, indices, anch
 
 
 class ConfusionMatrix:   

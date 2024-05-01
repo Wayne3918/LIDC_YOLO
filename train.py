@@ -71,7 +71,7 @@ def train(hyp, opt, device, callbacks):
 
     # Logs
     csv_path = os.path.join(save_dir,'training_log.csv')
-    csv_columns = ['epochs', 'lr', 'bbox loss', 'obj loss', 'cls loss', 'precision', 'recall', 'map0.35', 'map']
+    csv_columns = ['epochs', 'lr', 'train bbox loss', 'train obj loss', 'train cls loss', 'train reg loss', 'val bbox loss', 'val obj loss', 'val cls loss', 'val reg loss', 'precision', 'recall', 'map0.35', 'map']
 
     csv_file = open(csv_path, mode='w', newline='')
     csv_writer = csv.DictWriter(csv_file, fieldnames=csv_columns)
@@ -223,17 +223,18 @@ def train(hyp, opt, device, callbacks):
 
     for epoch in range(epochs):  # epoch ------------------------------------------------------------------
         model.train()
-        mloss = torch.zeros(3, device=device)  # mean losses
+        mloss = torch.zeros(4, device=device)  # mean losses
         if RANK != -1:
             train_loader.sampler.set_epoch(epoch)
         pbar = enumerate(train_loader)
-        print(('\n' + '%10s' * 7) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'labels', 'img_size'))
+        print(('\n' + '%10s' * 8) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'reg', 'labels', 'img_size'))
         if RANK in [-1, 0]:
             pbar = tqdm(pbar, total=nb)  # progress bar
         optimizer.zero_grad()
         
         # train loop
         for i, (imgs, targets, paths, _) in pbar:  # batch -------------------------------------------------------------
+            # print(targets)
             ni = i + nb * epoch  # number integrated batches (since train start)
             # Normalization
             if norm.lower() == 'ct':
@@ -279,7 +280,7 @@ def train(hyp, opt, device, callbacks):
             if RANK in [-1, 0]:
                 mloss = (mloss * i + loss_items) / (i + 1)  # update mean losses
                 mem = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'  # (GB)
-                pbar.set_description(('%10s' * 2 + '%10.4g' * 5) % (
+                pbar.set_description(('%10s' * 2 + '%10.4g' * 6) % (
                     f'{epoch}/{epochs - 1}', mem, *mloss, targets.shape[0], imgs.shape[-1]))
                 callbacks.run('on_train_batch_end', ni, model, imgs, targets, paths, plots, False)
             del imgs, targets
@@ -296,7 +297,7 @@ def train(hyp, opt, device, callbacks):
             ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'names', 'stride', 'class_weights'])
             final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
             if not noval or final_epoch:  # Calculate mAP
-                results, _, _ = val.run(data_dict,
+                results, _, _, val_loss = val.run(data_dict,
                                            batch_size=batch_size // WORLD_SIZE * 2,
                                            imgsz=imgsz,
                                            model=ema.ema,
@@ -341,9 +342,14 @@ def train(hyp, opt, device, callbacks):
         data = {
             'epochs': epoch,
             'lr': lr[0],
-            'bbox loss': mloss[0].item(),
-            'obj loss': mloss[1].item(),
-            'cls loss': mloss[2].item(),
+            'train bbox loss': mloss[0].item(),
+            'train obj loss': mloss[1].item(),
+            'train cls loss': mloss[2].item(),
+            'train reg loss': mloss[3].item(),
+            'val bbox loss': val_loss[0].item(),
+            'val obj loss': val_loss[1].item(),
+            'val cls loss': val_loss[2].item(),
+            'val reg loss': val_loss[3].item(),
             'precision': results[0],
             'recall': results[1],
             'map0.35': results[2],
@@ -360,7 +366,7 @@ def train(hyp, opt, device, callbacks):
             if f.exists():
                 strip_optimizer(f)  # strip optimizers
                 if f is best:
-                    results, _, _ = val.run(data_dict,
+                    results, _, _, _ = val.run(data_dict,
                                             batch_size=batch_size // WORLD_SIZE * 2,
                                             imgsz=imgsz,
                                             model=attempt_load(f, device).half(),
@@ -511,7 +517,7 @@ def main(opt, callbacks=Callbacks()):
                     v = (g * (npr.random(ng) < mp) * npr.randn(ng) * npr.random() * s + 1).clip(0.3, 3.0)
                 for i, k in enumerate(hyp.keys()):  # plt.hist(v.ravel(), 300)
                     hyp[k] = float(x[i + 7] * v[i])  # mutate
-   
+
             # Constrain to limits
             for k, v in meta.items():
                 hyp[k] = max(hyp[k], v[1])  # lower limit

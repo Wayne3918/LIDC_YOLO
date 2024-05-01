@@ -28,7 +28,7 @@ from utils.callbacks import Callbacks
 
 # 3D YOLO imports
 from utils3D.datasets import nifti_dataloader
-from utils3D.general import zxyzxy2zxydwh, non_max_suppression, zxydwh2zxyzxy, scale_coords
+from utils3D.general import zxyzxy2zxydwh, non_max_suppression, zxydwh2zxyzxy, scale_coords, inverse_sigmoid_tensor
 from utils3D.lossandmetrics import ConfusionMatrix, box_iou
 from models3D.model import attempt_load
 
@@ -146,7 +146,7 @@ def run(data,
     # class_map = list(range(1000))
     s = ('%20s' + '%11s' * 6) % ('Class', 'Images', 'Labels', 'P', 'R', 'mAP@.35', 'mAP@.35:.95')
     dt, p, r, f1, mp, mr, map50, map = [0.0, 0.0, 0.0], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    loss = torch.zeros(3, device=device)
+    loss = torch.zeros(4, device=device)
     # jdict, stats, ap, ap_class = [], [], [], []
     stats, ap, ap_class = [], [], []
     
@@ -180,9 +180,10 @@ def run(data,
             loss += compute_loss([x.float() for x in train_out], targets)[1]  # box, obj, cls
 
         # Run non max suppression
-        targets[:, 2:] *= torch.Tensor([depth, width, height, depth, width, height]).to(device)  # to pixels
+        targets[:, 2:-1] *= torch.Tensor([depth, width, height, depth, width, height]).to(device)  # to pixels
         lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
         t3 = time_sync()
+        out[:,:,-1] = inverse_sigmoid_tensor(out[:,:,-1])
         out = non_max_suppression(out, conf_thres, iou_thres, labels=lb, multi_label=True, agnostic=single_cls)
         dt[2] += time_sync() - t3
 
@@ -261,7 +262,7 @@ def run(data,
     maps = np.zeros(nc) + map
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]
-    return (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), maps, t
+    return (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), maps, t, loss
     
     
 def parse_opt():

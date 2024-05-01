@@ -61,7 +61,7 @@ def tensor_cutout(im: torch.Tensor, labels, cutout_params: List[List[float]], p=
     return im, labels
 
 
-def random_zoom(im: torch.Tensor, labels, max_zoom=1.5, min_zoom=0.7, p=0.5):
+def random_zoom(im: torch.Tensor, labels, mal_label, max_zoom=1.5, min_zoom=0.7, p=0.5):
     """Randomly zooms in or out of a random part of the input image.
 
     Args:
@@ -77,7 +77,7 @@ def random_zoom(im: torch.Tensor, labels, max_zoom=1.5, min_zoom=0.7, p=0.5):
     """
     
     y = labels.clone() if isinstance(labels, torch.Tensor) else np.copy(labels)
-    
+    mal_y = mal_label.clone() if isinstance(mal_label, torch.Tensor) else np.copy(mal_label)
     if random.random() < p:
         # retrieve original image shape (this is resized to imgsz x imgsz x imgsz by this point in the dataloader)
         d, w, h = im.shape[1:]
@@ -129,16 +129,16 @@ def random_zoom(im: torch.Tensor, labels, max_zoom=1.5, min_zoom=0.7, p=0.5):
             
             # crop labels beyond bounds of new image
             if isinstance(y, torch.Tensor):  # faster individually
-                y[:, 0].clamp_(0, d)  # z1
-                y[:, 1].clamp_(0, w)  # x1
-                y[:, 2].clamp_(0, h)  # y1
-                y[:, 3].clamp_(0, d)  # z2
-                y[:, 4].clamp_(0, w)  # x2
-                y[:, 5].clamp_(0, h)  # y2
+                y[:, 1].clamp_(0, d)  # z1
+                y[:, 2].clamp_(0, w)  # x1
+                y[:, 3].clamp_(0, h)  # y1
+                y[:, 4].clamp_(0, d)  # z2
+                y[:, 5].clamp_(0, w)  # x2
+                y[:, 6].clamp_(0, h)  # y2
             else:  # np.array (faster grouped)
-                y[:, [0, 3]] = y[:, [0, 3]].clip(0, d)  # z1, z2
-                y[:, [1, 4]] = y[:, [1, 4]].clip(0, w)  # x1, x2
-                y[:, [2, 5]] = y[:, [2, 5]].clip(0, h)  # y1, y2
+                y[:, [1, 4]] = y[:, [1, 4]].clip(0, d)  # z1, z2
+                y[:, [2, 5]] = y[:, [2, 5]].clip(0, w)  # x1, x2
+                y[:, [3, 6]] = y[:, [3, 6]].clip(0, h)  # y1, y2
              
         else:
             # new side lengths shorter than original side lengths
@@ -169,7 +169,7 @@ def random_zoom(im: torch.Tensor, labels, max_zoom=1.5, min_zoom=0.7, p=0.5):
             y[:, 3] = y[:, 3] + ymin
             y[:, 6] = y[:, 6] + ymin
 
-    return im, y
+    return im, y, mal_y
 
 def add_random_noise(im: torch.Tensor, noise_level=0.05, p=0.5):
     """

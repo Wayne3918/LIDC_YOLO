@@ -236,7 +236,7 @@ class Detect(nn.Module):
         """
         super().__init__()
         self.nc = nc  # number of classes
-        self.no = nc + 7  # number of outputs per anchor, (zxydwh) + nc + 1
+        self.no = nc + 7 + 1  # number of outputs per anchor, (zxydwh) + nc + 1
         self.nl = len(anchors)  # number of detection layers
         self.na = len(anchors[0]) // 3 # number of anchors per detection layer
         self.grid = [torch.zeros(1)] * self.nl  # initialize grid
@@ -273,6 +273,8 @@ class Detect(nn.Module):
 
                 z.append(y.view(bs, -1, self.no))
 
+        # print(x[0].shape)
+        # print((torch.cat(z, 1), x)[0].shape)
         return x if self.training else (torch.cat(z, 1), x)
 
     def _make_grid(self, nz=20, nx=20, ny=20, i=0):
