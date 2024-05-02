@@ -15,7 +15,7 @@ from typing import List
 from utils3D.lossandmetrics import bbox_iov
 
 
-def tensor_cutout(im: torch.Tensor, labels, cutout_params: List[List[float]], p=0.5):
+def tensor_cutout(im: torch.Tensor, labels, meta_label, cutout_params: List[List[float]], p=0.5):
     """Applies image cutout augmentation https://arxiv.org/abs/1708.04552
 
     Args:
@@ -57,8 +57,9 @@ def tensor_cutout(im: torch.Tensor, labels, cutout_params: List[List[float]], p=
                 box = np.array([zmin, xmin, ymin, zmax, xmax, ymax], dtype=np.float32)
                 iov = bbox_iov(box, labels[:, 1:7])  # intersection over volume
                 labels = labels[iov < 0.60]  # remove >60% obscured labels
-                
-    return im, labels
+                meta_label = meta_label[iov < 0.60]
+
+    return im, labels, meta_label
 
 
 def random_zoom(im: torch.Tensor, labels, mal_label, max_zoom=1.5, min_zoom=0.7, p=0.5):

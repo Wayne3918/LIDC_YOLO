@@ -314,10 +314,9 @@ def inverse_sigmoid_numpy(y):
     return np.log(y / (1 - y))
 
 def inverse_sigmoid_tensor(y):
-    if torch.any(y <= 0) or torch.any(y >= 1):
-        # raise ValueError("inverse_sigmoid value only accepts input between 0 and 1")
-        print("Warning! inverse_sigmoid value only accepts input between 0 and 1")
-        return y
+    eps = 1e-8
+    y = torch.clamp(y, min=eps, max=1-eps)
+
     return torch.log(y / (1 - y))
 
 def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False, multi_label=False,
@@ -337,7 +336,8 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     Returns:
         output (torch.tensor): list of detections, on (n,8) tensor per image [zxyzxy, conf, cls]
     """
-    nc = prediction.shape[2] - 7 - 1  # number of classes
+    nm = 9
+    nc = prediction.shape[2] - 7 - nm  # number of classes
     xc = prediction[..., 6] > conf_thres  # candidates
     # Checks
     assert 0 <= conf_thres <= 1, f'Invalid Confidence threshold {conf_thres}, valid values are between 0.0 and 1.0'
@@ -353,7 +353,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
 
     t = time.time()
     # output = [torch.zeros((0, 8), device=prediction.device)] * prediction.shape[0]
-    output = [torch.zeros((0, 9), device=prediction.device)] * prediction.shape[0]
+    output = [torch.zeros((0, 8 + nm), device=prediction.device)] * prediction.shape[0]
     for xi, x in enumerate(prediction):  # image index, image inference
         
         # print(x)
@@ -386,8 +386,17 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
             x = torch.cat((box[i], x[i, j + 7, None], j[:, None].float()), 1)
         else:  # best class only
             conf, j = x[:, 7:8].max(1, keepdim=True)
-            mal = x[:, 8:9]
-            x = torch.cat((box, conf, j.float(), mal), 1)[conf.view(-1) > conf_thres]
+            # print(x)
+            mal1 = x[:, 8:9]
+            mal2 = x[:, 9:10]
+            mal3 = x[:, 10:11]
+            mal4 = x[:, 11:12]
+            mal5 = x[:, 12:13]
+            mal6 = x[:, 13:14]
+            mal7 = x[:, 14:15]
+            mal8 = x[:, 15:16]
+            mal9 = x[:, 16:17]
+            x = torch.cat((box, conf, j.float(), mal1, mal2, mal3, mal4, mal5, mal6, mal7, mal8, mal9), 1)[conf.view(-1) > conf_thres]
         
         # Filter by class
         if classes is not None:

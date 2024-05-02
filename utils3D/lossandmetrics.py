@@ -279,7 +279,7 @@ class ComputeLossVF:
                 # print(ps.shape)
                 # print(ps[:, -1])
                 # print(tmal[i])
-                lreg += (self.MSEmal(ps[:, -1], tmal[i]))  # BCE
+                lreg += (self.MSEmal(ps[:, -9:], tmal[i]))  # BCE
                 # print(ps[:,-1])
                 # print(tmal[i])
 
@@ -326,7 +326,7 @@ class ComputeLossVF:
         """
         # na, nt = self.na, targets.shape[0]  # number of anchors, targets
         tcls, tbox, tmal, indices, anch = [], [], [], [], []
-        gain = torch.ones(9 + 1, device=targets.device)  # normalized to gridspace gain
+        gain = torch.ones(9 + 9, device=targets.device)  # normalized to gridspace gain
         ai = torch.arange(self.na, device=targets.device).float().view(self.na, 1).repeat(1, targets.shape[0])  # same as .repeat_interleave(nt)
         targets = torch.cat((targets.repeat(self.na, 1, 1), ai[:, :, None]), 2)  # append anchor indices
         # print(targets)
@@ -364,7 +364,7 @@ class ComputeLossVF:
 
             # Define
             b, c = t[:, :2].long().T  # image, class
-            mal = t[:, -2] # mal
+            meta = t[:, -10:-1] # mal
             gzxy = t[:, 2:5]  # grid zxy
             gdwh = t[:, 5:8]  # grid dwh
             gijk = (gzxy - offsets).long()
@@ -377,7 +377,7 @@ class ComputeLossVF:
             tbox.append(torch.cat((gzxy - gijk, gdwh), 1))  # box
             anch.append(anchors[a])  # anchors
             tcls.append(c)  # class
-            tmal.append(mal)
+            tmal.append(meta)
 
         return tcls, tbox, tmal, indices, anch
 

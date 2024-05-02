@@ -51,6 +51,7 @@ def run(weights,  # model.pt path(s)
         ):
     source = str(source)
 
+    nmeta = 9
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
     (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
@@ -99,10 +100,10 @@ def run(weights,  # model.pt path(s)
         
         # Inference
         pred = model(img)[0]
-        print(pred.shape)
-        pred[:,:,-1] = inverse_sigmoid_tensor(pred[:,:,-1])
+        # print(pred.shape)
         # print(pred[0,0,:])
         # NMS
+        pred[:,:,-9:] = inverse_sigmoid_tensor(pred[:,:,-9:])
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, multi_label=True, max_det=max_det)
 
         # Process predictions
@@ -124,22 +125,22 @@ def run(weights,  # model.pt path(s)
                 det[:, :6] = scale_coords(img.shape[2:], det[:, :6], im0_reshape).round()
                 
                 # Print results
-                for c in det[:, -2].unique():
-                    n = (det[:, -2] == c).sum()  # detections per class
+                for c in det[:, -1 - nmeta].unique():
+                    n = (det[:, -1 - nmeta] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
                 
                 # testing since default run doesn't set save_txt=True
-                for *zxyzxy, conf, cls, mal in reversed(det):
-                    zxydwh = (zxyzxy2zxydwh(torch.tensor(zxyzxy).view(1, 6)) / gn).view(-1).tolist()  # normalized zxydwh
-                    line = (cls, *zxydwh, conf, mal)  # label format
-                    print('\ncls z x y d w h conf mal')
+                for *zxyzxy, conf, cls, meta1, meta2, meta3, meta4, meta5, meta6, meta7, meta8, meta9 in reversed(det):
+                    zxydwh = (zxyzxy2zxydwh(torch.tensor(zxyzxy).view(1, 6)) / gn).view(-1).tolist()
+                    line = (cls, *zxydwh, conf, meta1, meta2, meta3, meta4, meta5, meta6, meta7, meta8, meta9)  # label format
+                    print('\ncls z x y d w h conf meta')
                     print(('%g ' * len(line)).rstrip() % line)
                     
                 # Write results
                 if save_txt:  # Write to file
-                    for *zxyzxy, conf, cls, mal in reversed(det):
+                    for *zxyzxy, conf, cls, meta1, meta2, meta3, meta4, meta5, meta6, meta7, meta8, meta9 in reversed(det):
                         zxydwh = (zxyzxy2zxydwh(torch.tensor(zxyzxy).view(1, 6)) / gn).view(-1).tolist()  # normalized zxydwh
-                        line = (cls, *zxydwh, conf, mal) if save_conf else (cls, *zxydwh, mal)  # label format
+                        line = (cls, *zxydwh, conf, meta1, meta2, meta3, meta4, meta5, meta6, meta7, meta8, meta9) if save_conf else (cls, *zxydwh, meta1, meta2, meta3, meta4, meta5, meta6, meta7, meta8, meta9)  # label format
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
                             

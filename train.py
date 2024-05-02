@@ -95,6 +95,7 @@ def train(hyp, opt, device, callbacks):
     with torch_distributed_zero_first(LOCAL_RANK):
         data_dict = data_dict or check_dataset(data)  # check if None
     nc = 1 if single_cls else int(data_dict['nc'])  # number of classes
+    nm = int(data_dict['nm'])  # number of metadata classes
     names = ['item'] if single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
     
     # Model
@@ -102,13 +103,13 @@ def train(hyp, opt, device, callbacks):
     pretrained = weights.endswith('.pt')
     if pretrained:
         ckpt = torch.load(weights,map_location=device)  # load checkpoint
-        model = Model(cfg or ckpt['model'].yaml, ch=1, nc=nc, anchors=hyp.get('anchors')).to(device) # create model
+        model = Model(cfg or ckpt['model'].yaml, ch=1, nc=nc, nm=nm, anchors=hyp.get('anchors')).to(device) # create model
         exclude = ['anchor'] if (cfg or hyp.get('anchors')) and not resume else []  # exclude keys
         csd = ckpt['model'].float().state_dict()  # checkpoint state_dict as FP32
         csd = intersect_dicts(csd, model.state_dict(), exclude=exclude)  # intersect
         model.load_state_dict(csd, strict=False)  # load
     else:        
-        model = Model(cfg = cfg, ch=1, nc=nc, anchors=hyp.get('anchors')).to(device)
+        model = Model(cfg = cfg, ch=1, nc=nc, nm=nm, anchors=hyp.get('anchors')).to(device)
     
     # loads from models folder
     with open(data, errors='ignore') as f:

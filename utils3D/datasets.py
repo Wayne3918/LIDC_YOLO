@@ -309,7 +309,7 @@ class LoadNiftisAndLabels(Dataset):
 
         labels = self.labels[self.indices[index]].copy()
         nl = len(labels)  # number of labels
-        mal_label = labels[:, -1]
+        meta_label = labels[:, 7:]
 
         labels = labels[:, :7]
         if self.augment:           
@@ -319,7 +319,7 @@ class LoadNiftisAndLabels(Dataset):
 
             # random zoom
             # img, labels = tensor_cutout(img, labels, self.hyp['cutout_params'])
-            img, labels, mal_label = random_zoom(img, labels, mal_label, self.hyp['max_zoom'], self.hyp['min_zoom'], self.hyp['prob_zoom'])
+            img, labels, meta_label = random_zoom(img, labels, meta_label, self.hyp['max_zoom'], self.hyp['min_zoom'], self.hyp['prob_zoom'])
             # img = adjust_brightness(img)
             # img, labels = random_flip_with_bbox(img, labels)
             img = add_random_noise(img, p=self.hyp['prob_zoom'])
@@ -331,24 +331,27 @@ class LoadNiftisAndLabels(Dataset):
             
             # Albumentations
             
-            # HSV color-space
+            # HSV color-space----------------------
             
             # Flip up-down
             
             # Flip left-right
             
             # Cutouts
-            img, labels = tensor_cutout(img, labels, self.hyp['cutout_params'], self.hyp['prob_cutout'])
+            img, labels, meta_label = tensor_cutout(img, labels, meta_label, self.hyp['cutout_params'], self.hyp['prob_cutout'])
             # update after cutout
             nl = len(labels)  # number of labels
         
-        len_mal = 1
+        len_mal = meta_label.shape[1] if meta_label.shape[1] != 0 else 9
+        # print(len_mal)
         labels_out = torch.zeros((nl, 8 + len_mal))
 
         if nl:
             labels_out[:, 1:8] = torch.from_numpy(labels)
-            labels_out[:, -1:] = torch.from_numpy(mal_label).view(-1, 1)
-
+            if meta_label.shape[1] != 0:
+                labels_out[:, 8:] = torch.from_numpy(meta_label)
+        
+        # print(labels_out.shape)
         return img, labels_out, self.img_files[self.indices[index]], shapes
 
     @staticmethod

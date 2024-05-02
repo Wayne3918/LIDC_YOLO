@@ -225,7 +225,7 @@ class SPPF(nn.Module):
 class Detect(nn.Module):
     stride = None  # strides computed during build
 
-    def __init__(self, nc=80, anchors=(), ch=(), inplace=True):  # detection layer
+    def __init__(self, nc=80, nm=9, anchors=(), ch=(), inplace=True):  # detection layer
         """YOLO Detection layer, adjusted for 3D
 
         Args:
@@ -236,7 +236,7 @@ class Detect(nn.Module):
         """
         super().__init__()
         self.nc = nc  # number of classes
-        self.no = nc + 7 + 1  # number of outputs per anchor, (zxydwh) + nc + 1
+        self.no = nc + 7 + nm  # number of outputs per anchor, (zxydwh) + nc + 1
         self.nl = len(anchors)  # number of detection layers
         self.na = len(anchors[0]) // 3 # number of anchors per detection layer
         self.grid = [torch.zeros(1)] * self.nl  # initialize grid
@@ -342,9 +342,9 @@ def parse_model(d, ch):
         (torch.Module): Configured model.
         (List[int]): List of layers from which to save output.
     """
-    anchors, nc, gd, gw = d['anchors'], d['nc'], d['depth_multiple'], d['width_multiple']
+    anchors, nc, nm, gd, gw = d['anchors'], d['nc'], d['nm'], d['depth_multiple'], d['width_multiple']
     na = (len(anchors[0]) // 3) if isinstance(anchors, list) else anchors  # number of anchors
-    no = na * (nc + 7)  # number of outputs = anchors * (classes + 7 [zxydwh + conf (I think)])
+    no = na * (nc + 7 + nm)  # number of outputs = anchors * (classes + 7 [zxydwh + conf (I think)])
 
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     # this loop configures all of the model's layers
@@ -374,9 +374,9 @@ def parse_model(d, ch):
         elif m is Detect:
             args.append([ch[x] for x in f])
             # args[1] for the Detect layer stores the nested list of anchors
-            if isinstance(args[1], int):  # number of anchors given instead of a list of anchors
+            if isinstance(args[2], int):  # number of anchors given instead of a list of anchors
                 # args[1] = [list(range(args[1] * 2))] * len(f)
-                args[1] = [list(range(args[1] * 3))] * len(f)
+                args[2] = [list(range(args[2] * 3))] * len(f)
         else:
             c2 = ch[f]
 
@@ -393,7 +393,7 @@ def parse_model(d, ch):
 
 
 class Model(nn.Module):
-    def __init__(self, cfg=ROOT / 'models3D/yolo3Ds.yaml', ch=1, nc=None, anchors=None):
+    def __init__(self, cfg=ROOT / 'models3D/yolo3Ds.yaml', ch=1, nc=None, nm=None, anchors=None):
         """3D YOLO model base class.
 
         Args:
@@ -418,6 +418,7 @@ class Model(nn.Module):
             self.yaml['nc'] = nc  # override yaml value
         if anchors:
             self.yaml['anchors'] = round(anchors)  # override yaml value
+        self.yaml['nm'] = nm  # override yaml value
         # parse_model configures the layers and passes in the anchors hyperparameter to the Detect layer
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, savelist
         self.names = [str(i) for i in range(self.yaml['nc'])]  # default names
